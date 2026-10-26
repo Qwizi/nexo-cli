@@ -1,0 +1,9 @@
+pub mod account;
+pub mod catalog;
+pub mod content;
+pub mod forms;
+pub mod images;
+pub mod ops;
+pub mod people;
+pub mod shop;
+pub mod structure;

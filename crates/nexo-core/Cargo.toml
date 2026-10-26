@@ -1,0 +1,29 @@
+[package]
+name = "nexo-core"
+description = "Nexo CMS client: profiles, device sign-in, tokens and API calls"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+base64.workspace = true
+blake3.workspace = true
+chrono.workspace = true
+directories.workspace = true
+image.workspace = true
+keyring.workspace = true
+mime_guess.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+wiremock.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,51 @@
+[workspace]
+resolver = "2"
+members = ["crates/nexo-core", "crates/nexo-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+authors = ["Adrian Ciolek <ciolek.adrian@proton.me>"]
+license = "MIT"
+repository = "https://github.com/Qwizi/nexo-cli"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+panic = "deny"
+unwrap_used = "deny"
+expect_used = "warn"
+
+[workspace.dependencies]
+nexo-core = { path = "crates/nexo-core" }
+anyhow = "1"
+base64 = "0.22"
+blake3 = "1"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive", "env"] }
+comfy-table = "7"
+csv = "1"
+dialoguer = "0.11"
+directories = "6"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+indicatif = "0.18"
+keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
+mime_guess = "2"
+open = "5"
+reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs", "time"] }
+toml = "0.8"
+wiremock = "0.6"
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+strip = true
