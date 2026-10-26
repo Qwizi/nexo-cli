@@ -42,18 +42,22 @@ token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
 if [ -z "$token" ] && command -v gh >/dev/null 2>&1; then
 	token="$(gh auth token 2>/dev/null || true)"
 fi
+# api ACCEPT URL [curl options…]: one Accept header (JSON or the raw file).
 api() {
+	accept="$1"
+	shift
 	if [ -n "$token" ]; then
-		curl -fsSL -H "Authorization: Bearer $token" -H "Accept: application/vnd.github+json" "$@"
+		curl -fsSL -H "Authorization: Bearer $token" -H "Accept: $accept" "$@"
 	else
-		curl -fsSL -H "Accept: application/vnd.github+json" "$@"
+		curl -fsSL -H "Accept: $accept" "$@"
 	fi
 }
+json=application/vnd.github+json
 
 if [ -n "${NEXO_VERSION:-}" ]; then
-	release="$(api "$API/releases/tags/$NEXO_VERSION")" || fail "nie ma wydania $NEXO_VERSION"
+	release="$(api "$json" "$API/releases/tags/$NEXO_VERSION")" || fail "nie ma wydania $NEXO_VERSION"
 else
-	release="$(api "$API/releases/latest")" || fail "nie mogę pobrać informacji o wydaniu (prywatne repo? ustaw GH_TOKEN albo zaloguj gh)"
+	release="$(api "$json" "$API/releases/latest")" || fail "nie mogę pobrać informacji o wydaniu (prywatne repo? ustaw GH_TOKEN albo zaloguj gh)"
 fi
 tag="$(printf '%s' "$release" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1)"
 [ -n "$tag" ] || fail "nie znalazłem wydania"
@@ -68,7 +72,7 @@ asset_id() {
 download() {
 	id="$(asset_id "$1")"
 	[ -n "$id" ] || fail "wydanie $tag nie ma pliku $1"
-	api -H "Accept: application/octet-stream" -o "$2" "$API/releases/assets/$id"
+	api application/octet-stream "$API/releases/assets/$id" -o "$2"
 }
 
 tmp="$(mktemp -d)"
