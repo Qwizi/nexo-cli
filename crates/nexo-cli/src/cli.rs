@@ -884,6 +884,10 @@ pub struct GenerateArgs {
     /// lifestyle-room, warm-packshot albo oba (domyślnie oba, jak w cr).
     #[arg(long, value_delimiter = ',')]
     pub preset: Vec<String>,
+    /// Zdjęcie źródłowe: fragment nazwy pliku (np. LET73G_02). Pierwsze dla
+    /// aranżacji, drugie dla packshotu; domyślnie pierwsze własne zdjęcia galerii.
+    #[arg(long = "source", value_delimiter = ',')]
+    pub sources: Vec<String>,
     /// Folder na wyniki.
     #[arg(long, default_value = "nexo-images")]
     pub out: PathBuf,

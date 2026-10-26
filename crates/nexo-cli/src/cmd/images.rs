@@ -125,10 +125,12 @@ async fn product(
         .cloned()
         .unwrap_or_default();
     let mut sources = Vec::new();
+    let mut names = Vec::new();
     for entry in &gallery {
         let asset_id = text(&entry["asset_id"]);
         let asset = client.get(&format!("/media/{asset_id}"), &[]).await?["data"].clone();
         let filename = text(&asset["filename"]);
+        names.push(filename.clone());
         if is_generated(&filename) {
             continue;
         }
@@ -139,8 +141,34 @@ async fn product(
             alt: text(&entry["alt"]).trim().to_owned(),
         });
     }
+    if args.dry_run {
+        eprintln!("  galeria: {}", names.join(", "));
+    }
+    if !args.sources.is_empty() {
+        // Chosen by hand, in the given order (generated photos allowed too).
+        let mut chosen = Vec::new();
+        for wanted in &args.sources {
+            let lower = wanted.to_lowercase();
+            let mut found = None;
+            for entry in &gallery {
+                let asset_id = text(&entry["asset_id"]);
+                let asset = client.get(&format!("/media/{asset_id}"), &[]).await?["data"].clone();
+                if text(&asset["filename"]).to_lowercase().contains(&lower) {
+                    found = Some(Source {
+                        asset_id,
+                        filename: text(&asset["filename"]),
+                        mime: text(&asset["mime"]),
+                        alt: text(&entry["alt"]).trim().to_owned(),
+                    });
+                    break;
+                }
+            }
+            chosen.push(found.with_context(|| format!("w galerii nie ma zdjęcia „{wanted}”"))?);
+        }
+        sources = chosen;
+    }
     if sources.is_empty() {
-        bail!("produkt nie ma własnych zdjęć (tylko wygenerowane albo żadnych)");
+        bail!("produkt nie ma własnych zdjęć (tylko wygenerowane albo żadnych); wskaż je --source");
     }
     // Like cr: the room from the first photo, the packshot from the next one.
     let source_for = |preset: Preset| match preset {

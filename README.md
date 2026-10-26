@@ -113,7 +113,8 @@ Z prawdziwego zdjęcia produktu Gemini tworzy aranżację wnętrza
 
 ```bash
 nexo images setup                               # klucz Gemini API (aistudio.google.com/apikey)
-nexo images generate MON001 --dry-run           # co by zrobił
+nexo images generate MON001 --dry-run           # co by zrobił i z których zdjęć
+nexo images generate MON001 --source LET73G_02,LET73G_03   # źródła wskazane ręcznie
 nexo images generate MON001 LUM005              # zapis do ./nexo-images/<produkt>/
 nexo images generate MON001 --upload --replace  # do biblioteki i galerii produktu (szkic)
 nexo images generate MON001 --upload --replace --publish
