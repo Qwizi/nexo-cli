@@ -22,6 +22,10 @@ open.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+zip.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

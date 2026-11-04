@@ -53,6 +53,7 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Groups(command) => cmd::people::groups(&ctx, command).await,
         Command::Audit(args) => cmd::people::audit(&ctx, args).await,
         Command::Images(command) => cmd::images::run(&ctx, command).await,
+        Command::Package(command) => cmd::package::run(&ctx, command).await,
     }
 }
 

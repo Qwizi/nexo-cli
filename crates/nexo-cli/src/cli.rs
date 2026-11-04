@@ -80,6 +80,9 @@ pub enum Command {
     Groups(GroupsCommand),
     /// Dziennik zdarzeń (kto, co i kiedy zmienił).
     Audit(AuditArgs),
+    /// Paczki: nowe rozszerzenie albo motyw, sprawdzenie, backend, archiwum do wgrania.
+    #[command(subcommand, alias = "pkg")]
+    Package(PackageCommand),
     /// Zdjęcia produktów generowane przez AI (Gemini) z prawdziwego zdjęcia.
     #[command(subcommand)]
     Images(ImagesCommand),
@@ -903,4 +906,70 @@ pub struct GenerateArgs {
     /// Pokazuje, co by zrobił, bez wywołań Gemini.
     #[arg(long)]
     pub dry_run: bool,
+}
+
+#[derive(Debug, Clone, clap::ValueEnum)]
+pub enum PackageKind {
+    /// Rozszerzenie: bloki, sloty, strony w panelu, backend.
+    Extension,
+    /// Motyw: wygląd witryny.
+    Theme,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum PackageBackend {
+    /// Rust (crate z nexo-extension-sdk, wasm32-wasip2).
+    Rust,
+    /// TypeScript (jco componentize).
+    Typescript,
+    /// Bez backendu: same bloki i sloty.
+    None,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PackageCommand {
+    /// Nowa paczka w folderze o jej id: manifest, renderer, backend, README.
+    New {
+        kind: PackageKind,
+        /// Id paczki: odwrócona domena, np. com.twoja-firma.nazwa.
+        id: String,
+        /// Nazwa w panelu (domyślnie z id).
+        #[arg(long)]
+        name: Option<String>,
+        /// Backend rozszerzenia.
+        #[arg(long, value_enum, default_value_t = PackageBackend::Rust)]
+        backend: PackageBackend,
+        /// Gdzie utworzyć folder paczki (domyślnie tutaj).
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
+    /// Sprawdza paczkę: układ, manifest, importy renderera, backend, wersję.
+    Check {
+        #[arg(default_value = ".")]
+        dir: PathBuf,
+        /// Także na CMS profilu (reguły manifestu, komponent wobec WIT), bez instalowania.
+        #[arg(long)]
+        server: bool,
+    },
+    /// Buduje backend.wasm (Rust: cargo dla wasm32-wasip2; TypeScript: jco).
+    Build {
+        #[arg(default_value = ".")]
+        dir: PathBuf,
+    },
+    /// Archiwum .zip do wgrania w panelu (Administracja › Rozszerzenia).
+    Pack {
+        #[arg(default_value = ".")]
+        dir: PathBuf,
+        /// Plik archiwum (domyślnie <id>-<wersja>.zip tutaj).
+        #[arg(long, short = 'o')]
+        output: Option<PathBuf>,
+    },
+    /// WIT rdzenia i wymaganych paczek do wit/deps, z drzewa Nexo CMS.
+    Wit {
+        #[arg(default_value = ".")]
+        dir: PathBuf,
+        /// Drzewo Nexo CMS (domyślnie to, w którym leży paczka).
+        #[arg(long)]
+        core: Option<PathBuf>,
+    },
 }
