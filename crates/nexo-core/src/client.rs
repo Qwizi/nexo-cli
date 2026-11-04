@@ -85,9 +85,7 @@ impl Client {
         query: &[(String, String)],
         body: Body,
     ) -> Result<Value> {
-        let response = self.send(method, path, query, &body).await?;
-        let status = response.status();
-        let bytes = response.bytes().await?;
+        let (status, bytes) = self.answer(method, path, query, &body).await?;
         if !status.is_success() {
             return Err(api_error(status, &bytes));
         }
@@ -95,6 +93,35 @@ impl Client {
             return Ok(Value::Null);
         }
         Ok(serde_json::from_slice(&bytes)?)
+    }
+
+    /// A call's status and body. Extensions' routes are `/sites/{id}/ext/…`;
+    /// a CMS from before packages v2 has them at `/modules/…` only, so a 404
+    /// there is asked again at the old address.
+    async fn answer(
+        &self,
+        method: Method,
+        path: &str,
+        query: &[(String, String)],
+        body: &Body,
+    ) -> Result<(StatusCode, Vec<u8>)> {
+        let response = self.send(method.clone(), path, query, body).await?;
+        let status = response.status();
+        let bytes = response.bytes().await?.to_vec();
+        match older_path(path) {
+            Some(older) if status == StatusCode::NOT_FOUND => {
+                let response = self.send(method, &older, query, body).await?;
+                let older_status = response.status();
+                let older_bytes = response.bytes().await?.to_vec();
+                // A newer CMS answers the same at both: keep its first answer.
+                if older_status == StatusCode::NOT_FOUND {
+                    Ok((status, bytes))
+                } else {
+                    Ok((older_status, older_bytes))
+                }
+            }
+            _ => Ok((status, bytes)),
+        }
     }
 
     pub async fn get(&self, path: &str, query: &[(String, String)]) -> Result<Value> {
@@ -111,13 +138,11 @@ impl Client {
 
     /// Raw bytes of a call (file downloads).
     pub async fn bytes(&self, path: &str) -> Result<Vec<u8>> {
-        let response = self.send(Method::GET, path, &[], &Body::None).await?;
-        let status = response.status();
-        let bytes = response.bytes().await?;
+        let (status, bytes) = self.answer(Method::GET, path, &[], &Body::None).await?;
         if !status.is_success() {
             return Err(api_error(status, &bytes));
         }
-        Ok(bytes.to_vec())
+        Ok(bytes)
     }
 
     /// Every item of a cursor-paginated list, up to `max`.
@@ -307,6 +332,14 @@ pub fn tokens_from(data: &Value, email: Option<String>) -> Result<Tokens> {
 }
 
 /// The API's error envelope as an [`Error`].
+/// `/sites/{id}/ext/{key}/…` at its address before packages v2
+/// (`/sites/{id}/modules/{key}/…`).
+pub fn older_path(path: &str) -> Option<String> {
+    let (head, tail) = path.split_once("/ext/")?;
+    (head.starts_with("/sites/") && !head["/sites/".len()..].contains('/'))
+        .then(|| format!("{head}/modules/{tail}"))
+}
+
 pub fn api_error(status: StatusCode, body: &[u8]) -> Error {
     let parsed: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
     let error = &parsed["error"];
@@ -330,4 +363,19 @@ pub fn mime_of(filename: &str) -> String {
         .first_or_octet_stream()
         .essence_str()
         .to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::older_path;
+
+    #[test]
+    fn extension_routes_have_their_old_address() {
+        assert_eq!(
+            older_path("/sites/site_1/ext/commerce/orders").as_deref(),
+            Some("/sites/site_1/modules/commerce/orders")
+        );
+        assert_eq!(older_path("/sites/site_1/accounts"), None);
+        assert_eq!(older_path("/documents/doc_1/ext/x"), None);
+    }
 }

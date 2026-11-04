@@ -390,7 +390,7 @@ pub enum ShopCommand {
         id: String,
         status: String,
     },
-    /// Klienci sklepu.
+    /// Klienci sklepu (konta odwiedzających witryny).
     Customers {
         #[command(flatten)]
         site: SiteArg,
