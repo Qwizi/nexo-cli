@@ -37,6 +37,7 @@ indicatif = "0.18"
 keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
 mime_guess = "2"
 open = "5"
+scraper = "0.22"
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -45,6 +46,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs", "time"] 
 toml = "0.8"
 wiremock = "0.6"
 tempfile = "3"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [profile.release]
 lto = "thin"

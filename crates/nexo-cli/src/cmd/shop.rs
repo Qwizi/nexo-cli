@@ -5,7 +5,7 @@ use anyhow::{Result, bail};
 use nexo_core::Client;
 use serde_json::{Value, json};
 
-use crate::cli::{PhotosCommand, ShopCommand};
+use crate::cli::{ImportFrom, PhotosCommand, ShopCommand};
 use crate::cmd::content::print_documents;
 use crate::ctx::{Ctx, query, text};
 use crate::out;
@@ -33,10 +33,7 @@ pub async fn run(ctx: &Ctx, command: ShopCommand) -> Result<()> {
             let id = find_product(&client, &site, &product).await?;
             let document = client.get(&format!("/documents/{id}"), &[]).await?;
             let shop = client
-                .get(
-                    &format!("/sites/{site}/modules/commerce/products/{id}"),
-                    &[],
-                )
+                .get(&format!("/sites/{site}/ext/commerce/products/{id}"), &[])
                 .await
                 .unwrap_or(Value::Null);
             out::value(&json!({ "document": document["data"], "shop": shop }));
@@ -50,7 +47,7 @@ pub async fn run(ctx: &Ctx, command: ShopCommand) -> Result<()> {
             let site = ctx.site_id(&client, site.site.as_deref()).await?;
             let rows = client
                 .list_all(
-                    &format!("/sites/{site}/modules/commerce/orders"),
+                    &format!("/sites/{site}/ext/commerce/orders"),
                     &query(&[("status", status.as_deref()), ("q", q.as_deref())]),
                     limit,
                 )
@@ -82,7 +79,7 @@ pub async fn run(ctx: &Ctx, command: ShopCommand) -> Result<()> {
             let id = order_id(&client, &site, &id).await?;
             out::value(
                 &client
-                    .get(&format!("/sites/{site}/modules/commerce/orders/{id}"), &[])
+                    .get(&format!("/sites/{site}/ext/commerce/orders/{id}"), &[])
                     .await?,
             );
         }
@@ -91,7 +88,7 @@ pub async fn run(ctx: &Ctx, command: ShopCommand) -> Result<()> {
             let id = order_id(&client, &site, &id).await?;
             let order = client
                 .post(
-                    &format!("/sites/{site}/modules/commerce/orders/{id}/status"),
+                    &format!("/sites/{site}/ext/commerce/orders/{id}/status"),
                     json!({ "status": status }),
                 )
                 .await?;
@@ -105,11 +102,21 @@ pub async fn run(ctx: &Ctx, command: ShopCommand) -> Result<()> {
             crate::cmd::catalog::export(ctx, site.site.as_deref(), output.as_deref()).await?;
         }
         ShopCommand::Import {
+            from: Some(ImportFrom::Woo(options)),
+            ..
+        } => {
+            crate::cmd::woo::run(ctx, *options).await?;
+        }
+        ShopCommand::Import {
+            from: None,
             site,
             file,
             dry_run,
             publish,
         } => {
+            let Some(file) = file else {
+                bail!("podaj plik CSV albo `woo`");
+            };
             crate::cmd::catalog::import(ctx, site.site.as_deref(), &file, dry_run, publish).await?;
         }
         ShopCommand::Photos(PhotosCommand::Add {
@@ -150,13 +157,48 @@ pub async fn run(ctx: &Ctx, command: ShopCommand) -> Result<()> {
         }
         ShopCommand::Customers { site, q } => {
             let site = ctx.site_id(&client, site.site.as_deref()).await?;
-            let page = client
-                .get(
-                    &format!("/sites/{site}/modules/commerce/admin/customers"),
+            // Customers are the site's accounts (the core's) since packages
+            // v2; an older CMS lists them in the shop.
+            match client
+                .list_all(
+                    &format!("/sites/{site}/accounts"),
                     &query(&[("q", q.as_deref())]),
+                    500,
                 )
-                .await?;
-            print_panel_list(ctx.json, &page);
+                .await
+            {
+                Ok(rows) => out::list(
+                    ctx.json,
+                    &rows,
+                    &[
+                        ("E-mail", &out::field("email")),
+                        ("Imię i nazwisko", &|r: &Value| {
+                            [text(&r["first_name"]), text(&r["last_name"])]
+                                .join(" ")
+                                .trim()
+                                .to_owned()
+                        }),
+                        ("Status", &out::field("status")),
+                        ("Grupy", &|r: &Value| {
+                            r["groups"]
+                                .as_array()
+                                .map(|g| g.iter().map(text).collect::<Vec<_>>().join(", "))
+                                .unwrap_or_default()
+                        }),
+                        ("Od", &|r: &Value| out::when(&r["created_at"])),
+                    ],
+                ),
+                Err(nexo_core::Error::Api { status: 404, .. }) => {
+                    let page = client
+                        .get(
+                            &format!("/sites/{site}/modules/commerce/admin/customers"),
+                            &query(&[("q", q.as_deref())]),
+                        )
+                        .await?;
+                    print_panel_list(ctx.json, &page);
+                }
+                Err(error) => return Err(error.into()),
+            }
         }
     }
     Ok(())
@@ -215,7 +257,7 @@ async fn order_id(client: &Client, site: &str, wanted: &str) -> Result<String> {
     }
     let found = client
         .list_all(
-            &format!("/sites/{site}/modules/commerce/orders"),
+            &format!("/sites/{site}/ext/commerce/orders"),
             &query(&[("q", Some(wanted))]),
             20,
         )

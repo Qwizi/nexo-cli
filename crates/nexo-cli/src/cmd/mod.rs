@@ -4,6 +4,8 @@ pub mod content;
 pub mod forms;
 pub mod images;
 pub mod ops;
+pub mod package;
 pub mod people;
 pub mod shop;
 pub mod structure;
+pub mod woo;

@@ -56,7 +56,7 @@ async fn shop_data(
         let mut set = tokio::task::JoinSet::new();
         for id in chunk {
             let client = client.clone();
-            let path = format!("/sites/{site}/modules/commerce/products/{id}");
+            let path = format!("/sites/{site}/ext/commerce/products/{id}");
             let id = id.clone();
             set.spawn(async move { (id, client.get(&path, &[]).await) });
         }
@@ -518,10 +518,7 @@ pub async fn import(
             "variants": product["variants"].as_array().into_iter().flatten().map(variant_input).collect::<Vec<_>>(),
         });
         client
-            .put(
-                &format!("/sites/{site}/modules/commerce/products/{doc}"),
-                body,
-            )
+            .put(&format!("/sites/{site}/ext/commerce/products/{doc}"), body)
             .await
             .with_context(|| format!("zapis {doc}"))?;
     }
