@@ -408,11 +408,16 @@ pub enum ShopCommand {
         #[arg(long, short = 'o')]
         output: Option<PathBuf>,
     },
-    /// Import cen, promocji, stanów i nazw z CSV (z `shop export`, wiersze po SKU).
+    /// Import cen, promocji, stanów i nazw z CSV (z `shop export`, wiersze po
+    /// SKU) albo całego sklepu WooCommerce (`shop import woo`).
+    #[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
     Import {
+        #[command(subcommand)]
+        from: Option<ImportFrom>,
         #[command(flatten)]
         site: SiteArg,
-        file: PathBuf,
+        #[arg(required = true)]
+        file: Option<PathBuf>,
         /// Pokazuje zmiany bez zapisywania.
         #[arg(long)]
         dry_run: bool,
@@ -738,6 +743,70 @@ pub enum ExtensionsCommand {
         #[arg(long, short = 'y')]
         yes: bool,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ImportFrom {
+    /// Sklep WooCommerce: kategorie, atrybuty, produkty z wariantami, cenami,
+    /// stanami i zdjęciami (przez REST API sklepu, tylko odczyt). Można
+    /// powtarzać: niezmienione produkty i wgrane zdjęcia są pomijane.
+    Woo(Box<WooImport>),
+}
+
+#[derive(Debug, clap::Args)]
+pub struct WooImport {
+    #[command(flatten)]
+    pub site: SiteArg,
+    /// Adres sklepu WooCommerce (https://sklep.example.pl).
+    #[arg(long)]
+    pub url: String,
+    /// Klucz REST API (WooCommerce › Ustawienia › Zaawansowane › REST API,
+    /// uprawnienie „Odczyt”).
+    #[arg(long, env = "WOO_CONSUMER_KEY", hide_env_values = true)]
+    pub key: String,
+    /// Sekret klucza REST API. Oba najlepiej w zmiennych środowiska, żeby nie
+    /// zostały w historii powłoki.
+    #[arg(long, env = "WOO_CONSUMER_SECRET", hide_env_values = true)]
+    pub secret: String,
+    /// Język dokumentów; domyślnie główny język witryny.
+    #[arg(long)]
+    pub locale: Option<String>,
+    /// Tylko tyle produktów, po kolei z każdej kategorii (import próbny).
+    #[arg(long)]
+    pub limit: Option<usize>,
+    /// Pokazuje, co powstanie i co się zmieni, bez zapisywania.
+    #[arg(long)]
+    pub dry_run: bool,
+    /// Importuje też produkty, które się nie zmieniły od poprzedniego razu.
+    #[arg(long)]
+    pub force: bool,
+    /// Zdjęcia: wszystkie (pobierane ze sklepu), zastępcze (jedno szare zdjęcie
+    /// w miejsce każdego, bez pobierania) albo żadne (galerie bez zmian).
+    #[arg(long, value_enum, default_value_t = WooPhotos::All)]
+    pub photos: WooPhotos,
+    /// Końcówka tytułów SEO z Yoast do obcięcia, np. " | Mój sklep" (CMS
+    /// dopisuje nazwę witryny sam); można powtarzać.
+    #[arg(long = "strip-title", value_name = "TEKST")]
+    pub strip_title: Vec<String>,
+    /// Pole meta produktu z zakładkami: lista {title, content, enabled}.
+    #[arg(long, value_name = "KLUCZ")]
+    pub tabs_meta: Option<String>,
+    /// Inne adresy sklepu, których linki w opisach stają się ścieżkami witryny.
+    #[arg(long = "own-host", value_name = "HOST")]
+    pub own_host: Vec<String>,
+    /// Plik stanu importu; domyślnie w folderze ustawień CLI.
+    #[arg(long)]
+    pub state: Option<PathBuf>,
+    /// Zostawia produkty w szkicach zamiast je publikować.
+    #[arg(long)]
+    pub no_publish: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum WooPhotos {
+    All,
+    Placeholder,
+    None,
 }
 
 #[derive(Debug, Subcommand)]

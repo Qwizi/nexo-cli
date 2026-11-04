@@ -5,7 +5,7 @@ use anyhow::{Result, bail};
 use nexo_core::Client;
 use serde_json::{Value, json};
 
-use crate::cli::{PhotosCommand, ShopCommand};
+use crate::cli::{ImportFrom, PhotosCommand, ShopCommand};
 use crate::cmd::content::print_documents;
 use crate::ctx::{Ctx, query, text};
 use crate::out;
@@ -102,11 +102,21 @@ pub async fn run(ctx: &Ctx, command: ShopCommand) -> Result<()> {
             crate::cmd::catalog::export(ctx, site.site.as_deref(), output.as_deref()).await?;
         }
         ShopCommand::Import {
+            from: Some(ImportFrom::Woo(options)),
+            ..
+        } => {
+            crate::cmd::woo::run(ctx, *options).await?;
+        }
+        ShopCommand::Import {
+            from: None,
             site,
             file,
             dry_run,
             publish,
         } => {
+            let Some(file) = file else {
+                bail!("podaj plik CSV albo `woo`");
+            };
             crate::cmd::catalog::import(ctx, site.site.as_deref(), &file, dry_run, publish).await?;
         }
         ShopCommand::Photos(PhotosCommand::Add {
