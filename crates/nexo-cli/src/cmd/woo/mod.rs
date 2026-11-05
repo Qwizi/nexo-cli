@@ -132,6 +132,15 @@ pub async fn run(ctx: &Ctx, options: WooImport) -> Result<()> {
 
     let mut products: Vec<Product> = woo.all("products?status=publish").await?;
     products.sort_by_key(|p| p.offer.id);
+    if options.only_new {
+        let existing = run.documents().await?;
+        let before = products.len();
+        products.retain(|p| !existing.contains_key(&slugify(&p.slug)));
+        eprintln!(
+            "Już na witrynie: {} (pomijam, --only-new).",
+            before - products.len()
+        );
+    }
     if let Some(limit) = options.limit {
         products = sample(products, limit);
     }
@@ -470,8 +479,10 @@ impl Run<'_> {
         }
         draft["seo"]["title"] = json!(seo_title(product, &title, &self.options.strip_title));
         draft["seo"]["description"] = json!(seo_description(product));
-        // Hidden in WooCommerce: reachable by its address, not listed.
-        draft["seo"]["exclude_from_listings"] = json!(product.catalog_visibility == "hidden");
+        // Hidden in WooCommerce, or one it cannot sell (no price): reachable
+        // by its address, not listed.
+        draft["seo"]["exclude_from_listings"] =
+            json!(product.catalog_visibility == "hidden" || !product.purchasable);
         let saved = self
             .client
             .put(
@@ -507,6 +518,11 @@ impl Run<'_> {
                 });
                 if let Some(rate) = current["tax_rate"].as_i64() {
                     body["tax_rate"] = json!(rate);
+                }
+                // Without a price nothing can be sold: the shop takes
+                // inquiries for it and the price is named in the answer.
+                if unpriced(&variants) {
+                    body["on_request"] = json!(true);
                 }
                 self.client
                     .put(&shop_path, body)
@@ -832,6 +848,16 @@ fn scaled(value: &str, factor: f64) -> Option<i64> {
     (scaled >= 0.0 && scaled < f64::from(i32::MAX)).then_some(scaled as i64)
 }
 
+/// Sizes up to 100 m and weights up to 10 t, what the shop takes; a value
+/// past them (millimetres typed where WooCommerce expects centimetres) is
+/// left out rather than losing the whole variant.
+const MAX_SIZE_MM: i64 = 100_000;
+const MAX_WEIGHT_G: i64 = 10_000_000;
+
+fn size(value: &str) -> Option<i64> {
+    scaled(value, 10.0).filter(|mm| *mm <= MAX_SIZE_MM)
+}
+
 /// WooCommerce's GMT time (`2026-05-01T00:00:00`) as RFC 3339.
 fn woo_time(value: Option<&String>) -> Option<String> {
     let value = value?.trim();
@@ -888,18 +914,20 @@ fn variant(offer: &Offer, sku: String, stock_of_parent: Option<i64>) -> Value {
             .map(Value::from),
     );
     put("stock", stock.map(|s| json!(s)));
-    put("weight_g", scaled(&offer.weight, 1000.0).map(|v| json!(v)));
+    put(
+        "weight_g",
+        scaled(&offer.weight, 1000.0)
+            .filter(|g| *g <= MAX_WEIGHT_G)
+            .map(|v| json!(v)),
+    );
     put(
         "length_mm",
-        scaled(&offer.dimensions.length, 10.0).map(|v| json!(v)),
+        size(&offer.dimensions.length).map(|v| json!(v)),
     );
-    put(
-        "width_mm",
-        scaled(&offer.dimensions.width, 10.0).map(|v| json!(v)),
-    );
+    put("width_mm", size(&offer.dimensions.width).map(|v| json!(v)));
     put(
         "height_mm",
-        scaled(&offer.dimensions.height, 10.0).map(|v| json!(v)),
+        size(&offer.dimensions.height).map(|v| json!(v)),
     );
     variant
 }
@@ -984,6 +1012,11 @@ fn variants_of(
         }
     }
     variants
+}
+
+/// Every variant is without a price (0 zł in WooCommerce).
+fn unpriced(variants: &[Value]) -> bool {
+    !variants.is_empty() && variants.iter().all(|v| v["price"].as_i64() == Some(0))
 }
 
 /// What the shop would refuse, said before sending.
@@ -1097,6 +1130,41 @@ mod tests {
             woo_time(Some(&"2026-05-01T10:00:00".to_owned())).as_deref(),
             Some("2026-05-01T10:00:00+00:00")
         );
+    }
+
+    #[test]
+    fn products_without_a_price_are_sold_on_request() {
+        assert!(unpriced(&[json!({ "sku": "A", "price": 0 })]));
+        assert!(!unpriced(&[
+            json!({ "sku": "A", "price": 0 }),
+            json!({ "sku": "B", "price": 100 })
+        ]));
+        assert!(!unpriced(&[]));
+    }
+
+    #[test]
+    fn products_woocommerce_cannot_sell_are_read_as_such() {
+        let unsold =
+            product(json!({ "id": 3, "name": "Komoda", "slug": "komoda", "purchasable": false }));
+        assert!(!unsold.purchasable);
+        let default = product(json!({ "id": 4, "name": "Stół", "slug": "stol" }));
+        assert!(default.purchasable, "older shops without the field sell");
+    }
+
+    #[test]
+    fn sizes_past_the_limits_are_left_out() {
+        let p = product(json!({
+            "id": 8, "name": "Szafa", "slug": "szafa", "type": "simple", "sku": "SZ-1",
+            "regular_price": "999", "weight": "20000",
+            "dimensions": { "length": "60", "width": "18000", "height": "210" }
+        }));
+        let variants = variants_of(&p, &[], &BTreeMap::new(), &[]);
+        let v = &variants[0];
+        assert_eq!(v["length_mm"], 600);
+        assert!(v.get("width_mm").is_none(), "180 m is not a wardrobe");
+        assert_eq!(v["height_mm"], 2_100);
+        assert!(v.get("weight_g").is_none());
+        assert!(check(&variants).is_ok());
     }
 
     #[test]

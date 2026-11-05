@@ -219,6 +219,10 @@ pub struct Product {
     pub kind: String,
     #[serde(default)]
     pub catalog_visibility: String,
+    /// WooCommerce sells it (it has a price); one it cannot sell it keeps
+    /// out of its catalogue.
+    #[serde(default = "yes")]
+    pub purchasable: bool,
     #[serde(default)]
     pub description: String,
     #[serde(default)]
@@ -258,4 +262,8 @@ pub struct Variation {
     pub image: Option<Image>,
     #[serde(default)]
     pub date_modified_gmt: String,
+}
+
+fn yes() -> bool {
+    true
 }

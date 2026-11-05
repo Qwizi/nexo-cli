@@ -800,6 +800,10 @@ pub struct WooImport {
     /// Zostawia produkty w szkicach zamiast je publikować.
     #[arg(long)]
     pub no_publish: bool,
+    /// Tylko produkty, których adresu jeszcze nie ma na witrynie (pozostałe,
+    /// także zaimportowane wcześniej innym sposobem, zostają bez zmian).
+    #[arg(long)]
+    pub only_new: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
