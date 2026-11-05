@@ -519,6 +519,11 @@ impl Run<'_> {
                 if let Some(rate) = current["tax_rate"].as_i64() {
                     body["tax_rate"] = json!(rate);
                 }
+                // Without a price nothing can be sold: the shop takes
+                // inquiries for it and the price is named in the answer.
+                if unpriced(&variants) {
+                    body["on_request"] = json!(true);
+                }
                 self.client
                     .put(&shop_path, body)
                     .await
@@ -1009,6 +1014,11 @@ fn variants_of(
     variants
 }
 
+/// Every variant is without a price (0 zł in WooCommerce).
+fn unpriced(variants: &[Value]) -> bool {
+    !variants.is_empty() && variants.iter().all(|v| v["price"].as_i64() == Some(0))
+}
+
 /// What the shop would refuse, said before sending.
 fn check(variants: &[Value]) -> std::result::Result<(), String> {
     if variants.is_empty() {
@@ -1120,6 +1130,16 @@ mod tests {
             woo_time(Some(&"2026-05-01T10:00:00".to_owned())).as_deref(),
             Some("2026-05-01T10:00:00+00:00")
         );
+    }
+
+    #[test]
+    fn products_without_a_price_are_sold_on_request() {
+        assert!(unpriced(&[json!({ "sku": "A", "price": 0 })]));
+        assert!(!unpriced(&[
+            json!({ "sku": "A", "price": 0 }),
+            json!({ "sku": "B", "price": 100 })
+        ]));
+        assert!(!unpriced(&[]));
     }
 
     #[test]
